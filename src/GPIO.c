@@ -1,6 +1,7 @@
 #include <wiringPi.h>
 #include "GPIO.h"
 #include <stddef.h>
+#include <stdio.h>
 
 #define DataLine 0  /*BCM.17 -> wiring Pi.0 -> GPIO.0*/
 #define ClockLine 7 /*BCM.4 -> wiring Pi.7 -> GPIO.7*/

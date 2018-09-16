@@ -52,9 +52,7 @@ typedef enum
     BAT_ERROR = 0xFC
 } PS_MOUSE_RESPONSE;
 
-const char EXTENDED_MOUSE_TEST_COMMANDS[] = {0xF3, 0xC8, 0xF3, 0x64, 0xF3, 0x50};
-const char EXTENDED_MOUSE2_TEST_COMMANDS[] = {0xF3, 0xC8, 0xF3, 0xC8, 0xF3, 0x50};
-
 void handle_mouse_messages(INPUT_EVENT_STRUCT *event_queue, int event_num);
+void mouse_init();
 
 #endif

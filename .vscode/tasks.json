@@ -5,6 +5,7 @@
   "tasks": [
     {
       "label": "build",
+      "taskName": "build",
       "type": "shell",
       "command": "make",
       "problemMatcher": ["$gcc"]

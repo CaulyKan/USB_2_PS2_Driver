@@ -1,11 +1,16 @@
 #include "mouse.h"
 #include "GPIO.h"
 #include "input.h"
+#include <stdio.h>
+#include <string.h>
 
 char g_last_6_host_commands[6] = {0};
 PS2_MOUSE_MODE g_mode;
 int g_initialized;
 int g_enabled;
+
+const char EXTENDED_MOUSE_TEST_COMMANDS[] = {0xF3, 0xC8, 0xF3, 0x64, 0xF3, 0x50};
+const char EXTENDED_MOUSE2_TEST_COMMANDS[] = {0xF3, 0xC8, 0xF3, 0xC8, 0xF3, 0x50};
 
 void push_history_host_command(char byte)
 {
@@ -94,11 +99,11 @@ void handle_mouse_messages(INPUT_EVENT_STRUCT *event_queue, int event_num)
 
                 if (g_mode == GENERIC_MOUSE && g_initialized && g_enabled)
                 {
-                    SendBytesDev2Host(&message, 2);
+                    SendBytesDev2Host((char*)&message, 2);
                 }
                 else if (g_mode != GENERIC_MOUSE && g_initialized && g_enabled)
                 {
-                    SendBytesDev2Host(&message, 3);
+                    SendBytesDev2Host((char*)&message, 3);
                 }
         }
     }

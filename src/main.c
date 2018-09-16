@@ -1,5 +1,6 @@
 #include "input.h"
 #include "mouse.h"
+#include "GPIO.h"
 
 int g_init = 0;
 
@@ -22,6 +23,7 @@ int main(int argc, char *argv[])
         if (!g_init)
         {
             g_init = 1;
+			PinInit();
             mouse_init();
             start_listening();
         }
@@ -30,4 +32,4 @@ int main(int argc, char *argv[])
 
         handle_mouse_messages(event_queue, event_queue_length);
     }
-}
+} 
