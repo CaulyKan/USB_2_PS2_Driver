@@ -7,44 +7,64 @@
 #define ClockLine 7 /*BCM.4 -> wiring Pi.7 -> GPIO.7*/
 #define HostLine 1
 
-char HostBuffer;
+int PinModes[40];
+
+unsigned char HostBuffer;
+
+char read(int pin)
+{
+    if (PinModes[pin] != INPUT)
+    {
+        pinMode(pin, INPUT);
+        PinModes[pin] = INPUT;
+    }
+    char result = digitalRead(pin);
+    return result;
+}
+
+void write(int pin, int state)
+{
+        if (PinModes[pin] != OUTPUT)
+    {
+        pinMode(pin, OUTPUT);
+        PinModes[pin] = OUTPUT;
+    }
+    digitalWrite(pin, state);
+}
 
 void WriteBitDev2Host(char bit_temp)
 {
-    pinMode(DataLine, OUTPUT);
-    digitalWrite(DataLine, bit_temp);
+    write(DataLine, bit_temp);
     delayMicroseconds(20);
-    pinMode(ClockLine, OUTPUT);
-    digitalWrite(ClockLine, LOW);
+    write(ClockLine, LOW);
     delayMicroseconds(40);
-    pinMode(ClockLine, GPIO_CLOCK);
+    write(ClockLine, HIGH);
     delayMicroseconds(20);
 }
 
 char ReadBitHost2Dev(void)
 {
     delayMicroseconds(20);
-    pinMode(ClockLine, OUTPUT);
-    digitalWrite(ClockLine, LOW);
+    write(ClockLine, LOW);
     delayMicroseconds(40);
-    pinMode(ClockLine, GPIO_CLOCK);
+    write(ClockLine, HIGH);
     delayMicroseconds(20);
-    digitalRead(DataLine);
+    return read(DataLine);
 }
 
 void WaitHigh(int gpio)
 {
-    while (digitalRead(gpio) == LOW)
+    while (read(gpio) == LOW)
         ;
 }
 
 void WaitLow(int gpio)
 {
-    while (digitalRead(gpio) == HIGH)
+    while (read(gpio) == HIGH)
         ;
 }
 
-char GetOddParity(char byte_temp)
+char GetOddParity(unsigned char byte_temp)
 {
     byte_temp ^= byte_temp >> 4;
     byte_temp ^= byte_temp >> 2;
@@ -56,34 +76,34 @@ char GetOddParity(char byte_temp)
 void PinInit(void)
 {
     wiringPiSetup();
-    pinMode(DataLine, INPUT);
-    pinMode(ClockLine, GPIO_CLOCK);
-    pinMode(HostLine, INPUT);
-    gpioClockSet(ClockLine, 15000);
-}
+    write(ClockLine, HIGH);
+    char result = read(ClockLine);
+ }
 
 int GetHostStatus()
 {
-    return digitalRead(HostLine);
+    return read(HostLine);
 }
 
 int SendByteDev2Host(char byte_temp)
 {
-    printf("d->h:0x%x", byte_temp);
+    printf("            0x%02x <device\n", byte_temp);
+    fflush(stdout);
 
     do
     {
         WaitHigh(ClockLine);                 //step1
         delayMicroseconds(50);               //step2
-    } while (digitalRead(ClockLine) == LOW); //step3
-    if (digitalRead(DataLine) != HIGH)       //step4
+    } while (read(ClockLine) == LOW); //step3
+    if (read(DataLine) != HIGH)       //step4
     {
+        printf("Ignored host data\n");
+        fflush(stdout);
         return 1;
     }
     else
     {
         delay(20); //step5
-        pinMode(DataLine, OUTPUT);
 
         /*START BIT, step6*/
         WriteBitDev2Host(LOW);
@@ -103,7 +123,7 @@ int SendByteDev2Host(char byte_temp)
 
         /*STOP BIT, step9*/
         WriteBitDev2Host(HIGH);
-
+        
         delay(30); //step10
     }
 }
@@ -119,7 +139,7 @@ void SendBytesDev2Host(char *p_byte_temp, int bytes_length)
 
 int CheckHostHasMessage(char *host_temp)
 {
-    if (digitalRead(ClockLine) == HIGH)
+    if (read(ClockLine) == HIGH)
     {
         return 0;
     }
@@ -127,12 +147,16 @@ int CheckHostHasMessage(char *host_temp)
     {
         WaitHigh(ClockLine); //step1
 
-        if (digitalRead(DataLine) == LOW) //step2
-        {
-            pinMode(ClockLine, GPIO_CLOCK);
-
-            HostBuffer = 0;
-
+        //if (read(DataLine) == LOW) //step2
+        //{
+            delayMicroseconds(20);
+            if (read(DataLine) != LOW)
+            {
+                printf("gpio: Host not prepaed;\n");
+                fflush(stdout);
+                return 0;
+            }
+ReadBitHost2Dev();
             /*DATA BITS, step3*/
             HostBuffer = ReadBitHost2Dev();
             HostBuffer += ReadBitHost2Dev() << 1;
@@ -142,49 +166,63 @@ int CheckHostHasMessage(char *host_temp)
             HostBuffer += ReadBitHost2Dev() << 5;
             HostBuffer += ReadBitHost2Dev() << 6;
             HostBuffer += ReadBitHost2Dev() << 7;
-
             /*PARITY BIT, step4*/
             char parity_temp = ReadBitHost2Dev();
 
+
+            if (parity_temp != GetOddParity(HostBuffer)){
+                printf("gpio: parity error, %d?\n", HostBuffer);
+                fflush(stdout);
+                return 0;
+            }
+                
             //TEST CODE
-            printf("h->d:0x%x", HostBuffer);
+            printf("host> 0x%x\n", HostBuffer);
+            fflush(stdout);
             *host_temp = HostBuffer;
 
-            /*STOP BIT, step5*/
-            if (ReadBitHost2Dev() == LOW)
-            {
-                return 1; /*Send Abort*/
-            }
-            else
-            {
-                if (digitalRead(DataLine) == LOW) //step6
-                {
-                    while (digitalRead(DataLine) != HIGH)
-                    {
-                        digitalWrite(ClockLine, digitalRead(ClockLine));
-                    }
-                    return 1;
-                }
-                else
-                {
-                    /*Output Acknowledge bit, step7*/
-                    WriteBitDev2Host(LOW);
-                    WriteBitDev2Host(HIGH);
+            //StopBit
+            ReadBitHost2Dev();
 
-                    /*Check parity bit, step8*/
-                    if (parity_temp != GetOddParity(HostBuffer))
-                    {
-                        return 1;
-                    }
-                    else
-                    {
-                        delayMicroseconds(45); //step9
-                        return 0;
-                    }
-                }
-            }
-        }
-        else
+            WriteBitDev2Host(LOW);
+            write(DataLine, HIGH);
+            
+            delayMicroseconds(25);
             return 1;
+
+//            /*STOP BIT, step5*/
+//            if (WriteBitDev2Host(LOW))
+//            {
+//                return 1; /*Send Abort*/
+//            }
+//            else
+//            {
+//                if (read(DataLine) == LOW) //step6
+//                {
+//                    while (read(DataLine) != HIGH)
+//                    {
+//                        write(ClockLine, read(ClockLine));
+//                    }
+//                    return 1;
+//                }
+//                else
+//                {
+//                    /*Output Acknowledge bit, step7*/
+//                    WriteBitDev2Host(LOW);
+//                    WriteBitDev2Host(HIGH);
+//
+//                    /*Check parity bit, step8*/
+//                    if (parity_temp != GetOddParity(HostBuffer))
+//                    {
+//                        return 1;
+//                    }
+//                    else
+//                    {
+//                        delayMicroseconds(45); //step9
+//                        return 0;
+//                    }
+//                }
+//            }
+            
     }
 }

@@ -8,6 +8,7 @@ char g_last_6_host_commands[6] = {0};
 PS2_MOUSE_MODE g_mode;
 int g_initialized;
 int g_enabled;
+int g_wait_for_params;
 
 const char EXTENDED_MOUSE_TEST_COMMANDS[] = {0xF3, 0xC8, 0xF3, 0x64, 0xF3, 0x50};
 const char EXTENDED_MOUSE2_TEST_COMMANDS[] = {0xF3, 0xC8, 0xF3, 0xC8, 0xF3, 0x50};
@@ -23,6 +24,11 @@ void push_history_host_command(char byte)
 void handle_host_message(PS2_MOUSE_HOST_COMMANDS host_command)
 {
     if (host_command == RESET)
+    {
+        SendByteDev2Host(ACK);
+        mouse_init();
+    }
+    else if (host_command == RESEND)
     {
         SendByteDev2Host(ACK);
         mouse_init();
@@ -58,6 +64,19 @@ void handle_host_message(PS2_MOUSE_HOST_COMMANDS host_command)
     {
         SendByteDev2Host(ACK);
         g_enabled = 1;
+    }
+    else if (host_command == SET_RESOLUTION || host_command == SET_SAMPLE_RATE)
+    {
+        SendByteDev2Host(ACK);
+        g_wait_for_params = 1;
+    }
+    else if (g_wait_for_params)
+    {
+        SendByteDev2Host(ACK);
+    }
+    else if (host_command == 0)
+    {
+        return;
     }
     else
     {

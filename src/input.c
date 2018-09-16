@@ -5,6 +5,7 @@
 int xi_opcode;
 int current_index;
 volatile int stop_flag;
+volatile int lock_flag;
 volatile int flush_flag;
 volatile int event_count;
 pthread_t thread;
@@ -13,7 +14,9 @@ INPUT_EVENT_STRUCT events_queue[100];
 static void _handle_event(XIRawEvent *event)
 {
     double *raw_val;
+    lock_flag = 1;
     int i = current_index;
+    if (i > 99) return;
 
     memset(&events_queue[i], 0, sizeof(INPUT_EVENT_STRUCT));
     events_queue[i].event_type = event->evtype;
@@ -35,6 +38,7 @@ static void _handle_event(XIRawEvent *event)
         break;
     }
     current_index++;
+    lock_flag = 0;
 }
 
 void *_start_listening(void *message)
@@ -136,7 +140,7 @@ void stop_listening()
 void get_events(OUT INPUT_EVENT_STRUCT **events, OUT int *count)
 {
     flush_flag = 1;
-    while (flush_flag)
+    while (lock_flag)
     {
     }
 
