@@ -3,11 +3,12 @@
 #include <stddef.h>
 #include <stdio.h>
 
-#define DataLine 0  /*BCM.17 -> wiring Pi.0 -> GPIO.0*/
-#define ClockLine 7 /*BCM.4 -> wiring Pi.7 -> GPIO.7*/
-#define HostLine 1
+#define mouse_data_pin 0  /*BCM.17 -> wiring Pi.0 -> GPIO.0*/
+#define mouse_clock_pin 7 /*BCM.4 -> wiring Pi.7 -> GPIO.7*/
+#define keyboard_data_pin 
+#define keyboard_clock_pin
+#define host_pin 1
 
-int G_EnableDebug = 0;
 int G_EnableBitProfile = 1;
 
 int PinModes[40];
@@ -35,24 +36,24 @@ void write(int pin, int state)
     digitalWrite(pin, state);
 }
 
-void WriteBitDev2Host(char bit_temp)
+void WriteBitDev2Host(int data_pin, int clock_pin, char bit_temp)
 {
-    write(DataLine, bit_temp == 0? LOW: HIGH);
+    write(data_pin, bit_temp == 0? LOW: HIGH);
     delayMicroseconds(20);
-    write(ClockLine, LOW);
+    write(clock_pin, LOW);
     delayMicroseconds(40);
-    write(ClockLine, HIGH);
+    write(clock_pin, HIGH);
     delayMicroseconds(20);
 }
 
-char ReadBitHost2Dev(void)
+char ReadBitHost2Dev(int data_pin, int clock_pin)
 {
     delayMicroseconds(20);
-    write(ClockLine, LOW);
+    write(clock_pin, LOW);
     delayMicroseconds(40);
-    write(ClockLine, HIGH);
+    write(clock_pin, HIGH);
     delayMicroseconds(20);
-    return read(DataLine);
+    return read(data_pin);
 }
 
 void WaitHigh(int gpio)
@@ -90,27 +91,31 @@ char GetOddParity(unsigned char cmd)
 void PinInit(void)
 {
     wiringPiSetup();
-    write(ClockLine, HIGH);
-    char result = read(ClockLine);
+    write(mouse_data_pin, HIGH);
+	write(mouse_clock_pin, HIGH);
+    write(keyboard_data_pin, HIGH);
+	write(keyboard_clock_pin, HIGH);
  }
 
 int GetHostStatus()
 {
-    return read(HostLine);
+    return read(host_pin);
 }
 
-int SendByteDev2Host(char byte_temp)
+int SendByteDev2Host(int device, char byte_temp)
 {
-    printf("            0x%02x <device\n", byte_temp);
+    printf("            0x%02x <%s\n", byte_temp, device? "keyboard": "mouse");
     fflush(stdout);
-    G_EnableDebug = 1;
+
+	int clock_pin = device ? keyboard_clock_pin : mouse_clock_pin;
+	int data_pin = device ? keyboard_data_pin : mouse_data_pin;
 
     do
     {
-        WaitHigh(ClockLine);                 //step1
+        WaitHigh(clock_pin);                 //step1
         delayMicroseconds(50);               //step2
-    } while (read(ClockLine) == LOW); //step3
-    if (read(DataLine) != HIGH)       //step4
+    } while (read(clock_pin) == LOW); //step3
+    if (read(data_pin) != HIGH)       //step4
     {
         printf("gpio: Ignored host data\n");
         fflush(stdout);
@@ -123,51 +128,50 @@ int SendByteDev2Host(char byte_temp)
 
         if (G_EnableBitProfile) printf("gpio: write start bit;\n");
         /*START BIT, step6*/
-        WriteBitDev2Host(LOW);
+        WriteBitDev2Host(data_pin, clock_pin, LOW);
 
         /*DATA BITS, step7*/
         if (G_EnableBitProfile) printf("gpio: write bit 1;\n");
-        WriteBitDev2Host(byte_temp & 1);
+        WriteBitDev2Host(data_pin, clock_pin, byte_temp & 1);
         if (G_EnableBitProfile) printf("gpio: write bit 2;\n");
-        WriteBitDev2Host((byte_temp & 0b10) >> 1);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b10) >> 1);
         if (G_EnableBitProfile) printf("gpio: write bit 3;\n");
-        WriteBitDev2Host((byte_temp & 0b100) >> 2);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b100) >> 2);
         if (G_EnableBitProfile)  printf("gpio: write bit 4;\n");
-        WriteBitDev2Host((byte_temp & 0b1000) >> 3);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b1000) >> 3);
         if (G_EnableBitProfile) printf("gpio: write bit 5;\n");
-        WriteBitDev2Host((byte_temp & 0b10000) >> 4);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b10000) >> 4);
         if (G_EnableBitProfile) printf("gpio: write bit 6;\n");
-        WriteBitDev2Host((byte_temp & 0b100000) >> 5);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b100000) >> 5);
         if (G_EnableBitProfile) printf("gpio: write bit 7;\n");
-        WriteBitDev2Host((byte_temp & 0b1000000) >> 6);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b1000000) >> 6);
         if (G_EnableBitProfile) printf("gpio: write bit 8;\n");
-        WriteBitDev2Host((byte_temp & 0b10000000) >> 7);
+        WriteBitDev2Host(data_pin, clock_pin, (byte_temp & 0b10000000) >> 7);
 
         /*PARITY BIT, step8*/
         if (G_EnableBitProfile) printf("gpio: write parity\n");
-        WriteBitDev2Host(GetOddParity(byte_temp));
+        WriteBitDev2Host(data_pin, clock_pin, GetOddParity(byte_temp));
 
         /*STOP BIT, step9*/
         if (G_EnableBitProfile) printf("gpio: write stop bit;\n");
-        WriteBitDev2Host(HIGH);
+        WriteBitDev2Host(data_pin, clock_pin, HIGH);
         
         delayMicroseconds(50); //step10
-        G_EnableDebug = 0;
     }
 }   
 
-void SendBytesDev2Host(char *p_byte_temp, int bytes_length)
+void SendBytesDev2Host(int device, char *p_byte_temp, int bytes_length)
 {
     for (int i = 0; i < bytes_length; i++)
     {
-        SendByteDev2Host(*p_byte_temp);
+        SendByteDev2Host(device, *p_byte_temp);
         p_byte_temp += 1;
     }
 }
 
-int CheckHostHasMessage(char *host_temp)
+int CheckHostHasMessage(int device, char *host_temp)
 {
-    if (read(ClockLine) == HIGH)
+    if (read(clock_pin) == HIGH)
     {
         return 0;
     }
@@ -175,9 +179,11 @@ int CheckHostHasMessage(char *host_temp)
     {
         printf("gpio: prepare to read host\n");
         fflush(stdout);
-        G_EnableDebug = 1;
+
+		int clock_pin = device ? keyboard_clock_pin : mouse_clock_pin;
+		int data_pin = device ? keyboard_data_pin : mouse_data_pin;
         
-        WaitHigh(ClockLine); //step1
+        WaitHigh(clock_pin); //step1
 
         //if (read(DataLine) == LOW) //step2
         //{
@@ -190,38 +196,37 @@ int CheckHostHasMessage(char *host_temp)
 //            }
             /*DATA BITS, step3*/
             if (G_EnableBitProfile) printf("gpio: read bit 1;\n");
-            HostBuffer = ReadBitHost2Dev();
+            HostBuffer = ReadBitHost2Dev(data_pin, clock_pin);
             if (G_EnableBitProfile) printf("gpio: read bit 2;\n");
-            HostBuffer += ReadBitHost2Dev() << 1;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 1;
             if (G_EnableBitProfile) printf("gpio: read bit 3;\n");
-            HostBuffer += ReadBitHost2Dev() << 2;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 2;
             if (G_EnableBitProfile) printf("gpio: read bit 4;\n");
-            HostBuffer += ReadBitHost2Dev() << 3;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 3;
             if (G_EnableBitProfile) printf("gpio: read bit 5;\n");
-            HostBuffer += ReadBitHost2Dev() << 4;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 4;
             if (G_EnableBitProfile) printf("gpio: read bit 6;\n");
-            HostBuffer += ReadBitHost2Dev() << 5;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 5;
             if (G_EnableBitProfile) printf("gpio: read bit 7;\n");
-            HostBuffer += ReadBitHost2Dev() << 6;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 6;
             if (G_EnableBitProfile) printf("gpio: read bit 8;\n");
-            HostBuffer += ReadBitHost2Dev() << 7;
+            HostBuffer += ReadBitHost2Dev(data_pin, clock_pin) << 7;
             /*PARITY BIT, step4*/
             if (G_EnableBitProfile) printf("gpio: read bit parity;\n");
-            char parity_temp = ReadBitHost2Dev();
+            char parity_temp = ReadBitHost2Dev(data_pin, clock_pin);
 
             //StopBit
             if (G_EnableBitProfile) printf("gpio: read stop bit;\n");
-            ReadBitHost2Dev();
+            ReadBitHost2Dev(data_pin, clock_pin);
 
             if (G_EnableBitProfile) printf("gpio: write act bit;\n");
             WriteBitDev2Host(LOW);
-            write(DataLine, HIGH);
+            write(data_pin, HIGH);
 
             if (parity_temp != GetOddParity(HostBuffer)){
                 printf("gpio: parity error, %x?\n", HostBuffer);
                 fflush(stdout);
                 delayMicroseconds(45);
-                G_EnableDebug = 0;
                 return 0;
             }
             
@@ -230,7 +235,6 @@ int CheckHostHasMessage(char *host_temp)
             *host_temp = HostBuffer;
             
             delayMicroseconds(45);
-            G_EnableDebug = 0;
             return 1;
 
 //            /*STOP BIT, step5*/

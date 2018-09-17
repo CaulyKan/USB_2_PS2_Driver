@@ -25,12 +25,12 @@ void handle_host_message(PS2_MOUSE_HOST_COMMANDS host_command)
 {
     if (host_command == RESET)
     {
-        SendByteDev2Host(ACK);
+        SendByteDev2Host(MOUSE, ACK);
         mouse_init();
     }
     else if (host_command == RESEND)
     {
-        SendByteDev2Host(ACK);
+        SendByteDev2Host(MOUSE, ACK);
         mouse_init();
     }
     else if (host_command == GET_DEVICE_ID)
@@ -38,41 +38,41 @@ void handle_host_message(PS2_MOUSE_HOST_COMMANDS host_command)
         if (strncmp(g_last_6_host_commands, EXTENDED_MOUSE_TEST_COMMANDS, 6))
         {
             g_mode = EXTENDED_MOUSE;
-            SendByteDev2Host(ACK);
-            SendByteDev2Host(EXTENDED_MOUSE);
+            SendByteDev2Host(MOUSE, ACK);
+            SendByteDev2Host(MOUSE, EXTENDED_MOUSE);
         }
         else if (strncmp(g_last_6_host_commands, EXTENDED_MOUSE2_TEST_COMMANDS, 6))
         {
             g_mode = EXTENDED_MOUSE2;
-            SendByteDev2Host(ACK);
-            SendByteDev2Host(EXTENDED_MOUSE2);
+            SendByteDev2Host(MOUSE, ACK);
+            SendByteDev2Host(MOUSE, EXTENDED_MOUSE2);
         }
         else
         {
-            SendByteDev2Host(ACK);
-            SendByteDev2Host(GENERIC_MOUSE);
+            SendByteDev2Host(MOUSE, ACK);
+            SendByteDev2Host(MOUSE, GENERIC_MOUSE);
         }
     }
     else if (host_command == STAUTS_REPORT)
     {
-        SendByteDev2Host(ACK);
-        SendByteDev2Host(g_mode);
-        SendByteDev2Host(0x02);
-        SendByteDev2Host(0x64);
+        SendByteDev2Host(MOUSE, ACK);
+        SendByteDev2Host(MOUSE, g_mode);
+        SendByteDev2Host(MOUSE, 0x02);
+        SendByteDev2Host(MOUSE, 0x64);
     }
     else if (host_command == ENABLE_DATA_REPORTING)
     {
-        SendByteDev2Host(ACK);
+        SendByteDev2Host(MOUSE, ACK);
         g_enabled = 1;
     }
     else if (host_command == SET_RESOLUTION || host_command == SET_SAMPLE_RATE)
     {
-        SendByteDev2Host(ACK);
+        SendByteDev2Host(MOUSE, ACK);
         g_wait_for_params = 1;
     }
     else if (g_wait_for_params)
     {
-        SendByteDev2Host(ACK);
+        SendByteDev2Host(MOUSE, ACK);
     }
     else if (host_command == 0)
     {
@@ -80,7 +80,7 @@ void handle_host_message(PS2_MOUSE_HOST_COMMANDS host_command)
     }
     else
     {
-        SendByteDev2Host(ACK);
+        SendByteDev2Host(MOUSE, ACK);
     }
     push_history_host_command(host_command);
 }
@@ -89,8 +89,8 @@ void mouse_init()
 {
     g_mode = GENERIC_MOUSE;
     g_enabled = 0;
-    SendByteDev2Host(BAT_SUCCESS);
-    SendByteDev2Host(g_mode);
+    SendByteDev2Host(MOUSE, BAT_SUCCESS);
+    SendByteDev2Host(MOUSE, g_mode);
     g_initialized = 1;
 }
 
@@ -98,7 +98,7 @@ void handle_mouse_messages(INPUT_EVENT_STRUCT *event_queue, int event_num)
 {
     PS2_MOUSE_EXTENSION_PACK_STRUCT message;
     char host_byte;
-    while (CheckHostHasMessage(&host_byte))
+    while (CheckHostHasMessage(MOUSE, &host_byte))
     {
         handle_host_message((PS2_MOUSE_HOST_COMMANDS)host_byte);
     }
@@ -114,16 +114,15 @@ void handle_mouse_messages(INPUT_EVENT_STRUCT *event_queue, int event_num)
             message.movement_y = (int)event_ptr->motion_Y;
             if (event_ptr->event_type == EVENT_MOUSE_BUTTON_PRESS)
                 message.movement_z = (event_ptr->mouse_button == BUTTON_FORWARD ? 1 : event_ptr->mouse_button == BUTTON_BACK ? -1 : 0);
-            if (g_mode == GENERIC_MOUSE)
 
-                if (g_mode == GENERIC_MOUSE && g_initialized && g_enabled)
-                {
-                    SendBytesDev2Host((char*)&message, 2);
-                }
-                else if (g_mode != GENERIC_MOUSE && g_initialized && g_enabled)
-                {
-                    SendBytesDev2Host((char*)&message, 3);
-                }
+			if (g_mode == GENERIC_MOUSE && g_initialized && g_enabled)
+			{
+				SendBytesDev2Host((char*)&message, 2);
+			}
+			else if (g_mode != GENERIC_MOUSE && g_initialized && g_enabled)
+			{
+				SendBytesDev2Host((char*)&message, 3);
+			}
         }
     }
 }

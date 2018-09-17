@@ -4,35 +4,56 @@
 #include <stdio.h>
 #include <pthread.h>
 #include <wiringPi.h>
-
+#include <sys/time.h>
 
 int g_init = 0;
 int test_thread;
 
+long long int get_timestamp()
+{
+	struct timeval timer_usec;
+	long long int timestamp_usec;
+	if (!gettimeofday(&timer_usec, NULL)) {
+		timestamp_usec = ((long long int) timer_usec.tv_sec) * 1000000ll +
+			(long long int) timer_usec.tv_usec;
+		return timestamp_usec;
+	}
+	return -1;
+}
+
 void *_test (void *message)
 {
-    G_EnableDebug = 1;
+        pinMode(26, INPUT);
+        pinMode(27, INPUT);
         pinMode(28, INPUT);
         pinMode(29, INPUT);
         
-        char pin28, pin29;
-        long double t;
+		char pin26, pin27, pin28, pin29;
+		char old26, old27, old28, old29;
+		long long int base_timestamp;
         
         do
         {
+            pin26 = digitalRead(26);
+            pin27 = digitalRead(27);
             pin28 = digitalRead(28);
             pin29 = digitalRead(29);
             
-            if (G_EnableDebug)
+            if (pin26 != old26 || pin27 != old27 || pin28 != old28 || pin29 != old29)
             {
-                if (pin28) printf(" ]"); else printf("[ ");
-                if (pin29) printf ("   ]"); else printf("  [ ");
-                printf("  %f ms\n", t*5/1000);
+				old26 = pin26;
+				old27 = pin27;
+				old28 = pin28;
+				old29 = pin29;
+
+                printf("%s%s%s%s  %f ms\n", 
+					pin26? " ]": "[ ",
+					pin27? "   ]": "  [ ",
+					pin28? " |    ]": " |   [ ",
+					pin29? "   ]": "  [ ",
+					(get_timestamp() - base_timestamp) / 1000);
                 fflush(stdout);
             }
-            
-            t+=1;
-            delayMicroseconds(5);
         } while(1);
 }
 
@@ -47,7 +68,6 @@ int main(int argc, char *argv[])
     PinInit();    
     
     pthread_create(&test_thread, NULL, _test, (void *)"input monitoring thread");
-    
 
     while (1)
     {
